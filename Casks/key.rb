@@ -8,5 +8,5 @@ cask "key" do
   homepage "https://github.com/tvanreenen/key"
 
   app "Key.app"
-  binary "\#{appdir}/Key.app/Contents/MacOS/key", target: "key"
+  binary "#{appdir}/Key.app/Contents/MacOS/key", target: "key"
 end
