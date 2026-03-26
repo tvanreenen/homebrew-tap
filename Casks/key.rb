@@ -1,8 +1,8 @@
 cask "key" do
-  version "v0.1.0-alpha.3"
-  sha256 "9acd4522f8678b95fdf3f0486df2f17b6f2e10f0ddd965025a773ff3f04e2311"
+  version "v0.1.0-beta.1"
+  sha256 "f71b212037c4451210045a388605efec6e60613ebcbe755b7bdcdee3d5f733b8"
 
-  url "https://github.com/tvanreenen/key/releases/download/v0.1.0-alpha.3/Key-v0.1.0-alpha.3.zip"
+  url "https://github.com/tvanreenen/key/releases/download/v0.1.0-beta.1/Key-v0.1.0-beta.1.zip"
   name "key"
   desc "macOS file-based secret manager with native auth"
   homepage "https://github.com/tvanreenen/key"
