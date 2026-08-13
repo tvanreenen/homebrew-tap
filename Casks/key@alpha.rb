@@ -1,8 +1,8 @@
 cask "key@alpha" do
-  version "v0.2.0-alpha.8"
-  sha256 "c3a8c2b33e2ef95297f64bc667473244a7f68de25d8e22daf959b14713714e16"
+  version "v0.2.0-alpha.9"
+  sha256 "e101ce9819000af8cd84e5becb734b9bb4efba058326fd9be511ea497d4f1451"
 
-  url "https://github.com/tvanreenen/key/releases/download/v0.2.0-alpha.8/Key-Preview-v0.2.0-alpha.8.zip"
+  url "https://github.com/tvanreenen/key/releases/download/v0.2.0-alpha.9/Key-Preview-v0.2.0-alpha.9.zip"
   name "Key Preview"
   desc "File-based secret manager with native authentication"
   homepage "https://github.com/tvanreenen/key"
