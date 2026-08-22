@@ -1,0 +1,11 @@
+# GitHub Actions supports concurrency.queue, but actionlint 1.7.12 does not yet
+# include it in its workflow schema. Homebrew invokes actionlint with both
+# repository-relative and physical tap paths, so cover both while keeping the
+# exception scoped to one workflow and the exact schema diagnostic.
+paths:
+  .github/workflows/publish-package.yml:
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'
+  "**/.github/workflows/publish-package.yml":
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'

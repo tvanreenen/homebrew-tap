@@ -1,0 +1,348 @@
+name: Publish package update
+
+run-name: Publish ${{ inputs.package }} ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to update
+        required: true
+        type: choice
+        options:
+          - xkcdpass
+          - key
+          - frame
+      version:
+        description: Published v-prefixed Semantic Version
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: homebrew-package-${{ inputs.package }}
+  queue: max
+
+jobs:
+  verify:
+    name: Verify release and package
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      brew_ref: ${{ steps.package.outputs.brew_ref }}
+      changed: ${{ steps.candidate.outputs.changed }}
+      kind: ${{ steps.package.outputs.kind }}
+      tap_path: ${{ steps.package.outputs.tap_path }}
+      token: ${{ steps.package.outputs.token }}
+      version: ${{ steps.request.outputs.version }}
+
+    steps:
+      - name: Validate publication request
+        id: request
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PACKAGE: ${{ inputs.package }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          SELECTED_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$'
+          [[ "${REQUESTED_VERSION}" =~ ${semver} ]] || {
+            echo "version must be a valid v-prefixed Semantic Version" >&2
+            exit 1
+          }
+          case "${PACKAGE}" in
+            xkcdpass | key | frame) ;;
+            *) echo "unsupported package: ${PACKAGE}" >&2; exit 1 ;;
+          esac
+          [[ "${DEFAULT_BRANCH}" == "main" && "${SELECTED_REF}" == "refs/heads/main" ]] || {
+            echo "publication must be dispatched from the tap's default main branch" >&2
+            exit 1
+          }
+          echo "version=${REQUESTED_VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Homebrew and check out the tap
+        id: homebrew
+        uses: Homebrew/actions/setup-homebrew@8f3d1ec8a696b3b9d9a6c3696b6c73033cab69e4 # 2026.08.14.1
+        with:
+          core: false
+          cask: false
+          stable: true
+
+      - name: Record the verified base commit
+        id: base
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          base_sha="$(git rev-parse HEAD)"
+          [[ "${base_sha}" == "${DISPATCH_SHA}" ]] || {
+            echo "the tap checkout does not match the dispatched commit" >&2
+            exit 1
+          }
+
+      - name: Verify the published package release
+        id: package
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ steps.request.outputs.version }}
+        run: .github/scripts/prepare-package-update.sh "${PACKAGE}" "${VERSION}" "${GITHUB_OUTPUT}"
+
+      - name: Install Homebrew style dependencies
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        run: brew install-bundler-gems --groups=style
+
+      - name: Prepare the package change
+        id: candidate
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          BREW_REF: ${{ steps.package.outputs.brew_ref }}
+          DOWNLOAD_URL: ${{ steps.package.outputs.download_url }}
+          FORMULA_VERSION: ${{ steps.package.outputs.formula_version }}
+          KIND: ${{ steps.package.outputs.kind }}
+          PACKAGE: ${{ inputs.package }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+          TAP_PATH: ${{ steps.package.outputs.tap_path }}
+          TOKEN: ${{ steps.package.outputs.token }}
+        run: |
+          set -euo pipefail
+          created=false
+          if [[ ! -f "${TAP_PATH}" ]]; then
+            [[ "${PACKAGE}:${TOKEN}" == "key:key@rc" ]] || {
+              echo "expected package file is missing: ${TAP_PATH}" >&2
+              exit 1
+            }
+            if [[ -n "$(git log -1 --format=%H -- "${TAP_PATH}")" ]]; then
+              echo "refusing to recreate a previously tracked package file: ${TAP_PATH}" >&2
+              exit 1
+            fi
+            .github/scripts/render-key-preview-cask.rb \
+              .github/templates/key-preview-cask.rb.in \
+              "${TAP_PATH}" \
+              "${TOKEN}" \
+              "${FORMULA_VERSION}" \
+              "${SHA256}"
+            created=true
+          else
+            .github/scripts/check-package-state.sh \
+              "${KIND}" \
+              "${BREW_REF}" \
+              "${FORMULA_VERSION}" \
+              "${DOWNLOAD_URL}" \
+              "${SHA256}" \
+              "${RUNNER_TEMP}/package-state"
+            if grep -qx "current=true" "${RUNNER_TEMP}/package-state"; then
+              echo "${TAP_PATH} already publishes the verified release"
+              echo "changed=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+          fi
+
+          if [[ "${KIND}" == "formula" ]]; then
+            brew bump-formula-pr --write-only --no-audit \
+              --url="${DOWNLOAD_URL}" \
+              --sha256="${SHA256}" \
+              "${BREW_REF}"
+          elif [[ "${created}" == "false" ]]; then
+            bump_args=(
+              --write-only
+              --no-audit
+              --version="${FORMULA_VERSION}"
+              --sha256="${SHA256}"
+            )
+            brew bump-cask-pr "${bump_args[@]}" "${BREW_REF}"
+          fi
+
+          brew style --fix "${TAP_PATH}"
+          changed_paths="$(git status --short | sed -E 's/^.. //')"
+          if [[ -z "${changed_paths}" ]]; then
+            echo "${TAP_PATH} already publishes the verified release"
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          [[ "${changed_paths}" == "${TAP_PATH}" ]] || {
+            echo "package bump changed files other than ${TAP_PATH}" >&2
+            exit 1
+          }
+          if [[ "${created}" == "true" ]]; then
+            git add --intent-to-add -- "${TAP_PATH}"
+          fi
+          git diff --check
+          git diff --binary -- "${TAP_PATH}" > "${RUNNER_TEMP}/package-update.patch"
+          echo "created=${created}" >> "${GITHUB_OUTPUT}"
+          echo "changed=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Check package style and audit
+        if: steps.candidate.outputs.changed == 'true'
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          BREW_REF: ${{ steps.package.outputs.brew_ref }}
+          CREATED: ${{ steps.candidate.outputs.created }}
+          TAP_PATH: ${{ steps.package.outputs.tap_path }}
+          TOKEN: ${{ steps.package.outputs.token }}
+        run: |
+          set -euo pipefail
+          brew style "${TAP_PATH}"
+          if [[ "${CREATED}" == "true" ]]; then
+            audit_args=(--new)
+          else
+            audit_args=(--strict --online)
+          fi
+          case "${TOKEN}" in
+            key@alpha | key@beta | key@rc)
+              audit_args+=(--except=github_prerelease_version)
+              ;;
+          esac
+          brew audit "${audit_args[@]}" "${BREW_REF}"
+
+      - name: Install and test formula
+        if: steps.candidate.outputs.changed == 'true' && steps.package.outputs.kind == 'formula'
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          BREW_REF: ${{ steps.package.outputs.brew_ref }}
+          GH_TOKEN: ""
+          HOMEBREW_GITHUB_API_TOKEN: ""
+          HOMEBREW_NO_INSTALL_FROM_API: "1"
+        run: |
+          set -euo pipefail
+          brew install --build-from-source "${BREW_REF}"
+          brew test "${BREW_REF}"
+
+      - name: Install and uninstall cask
+        if: steps.candidate.outputs.changed == 'true' && steps.package.outputs.kind == 'cask'
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          BREW_REF: ${{ steps.package.outputs.brew_ref }}
+          GH_TOKEN: ""
+          HOMEBREW_GITHUB_API_TOKEN: ""
+          HOMEBREW_NO_INSTALL_FROM_API: "1"
+        run: |
+          set -euo pipefail
+          brew install --cask "${BREW_REF}"
+          brew uninstall --cask "${BREW_REF}"
+
+      - name: Upload the verified package patch
+        if: steps.candidate.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-update-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/package-update.patch
+          if-no-files-found: error
+          retention-days: 1
+
+  propose:
+    name: Propose package update
+    if: needs.verify.outputs.changed == 'true'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Revalidate verified outputs
+        env:
+          PACKAGE: ${{ inputs.package }}
+          TAP_PATH: ${{ needs.verify.outputs.tap_path }}
+          TOKEN: ${{ needs.verify.outputs.token }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$'
+          [[ "${VERSION}" =~ ${semver} ]] || exit 1
+          case "${PACKAGE}:${TAP_PATH}:${TOKEN}" in
+            xkcdpass:Formula/xkcdpass.rb:xkcdpass | frame:Casks/frame.rb:frame) ;;
+            key:Casks/key.rb:key | key:Casks/key@alpha.rb:key@alpha | key:Casks/key@beta.rb:key@beta | key:Casks/key@rc.rb:key@rc) ;;
+            *) echo "verified package mapping is invalid" >&2; exit 1 ;;
+          esac
+
+      - name: Check out current main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Download the verified package patch
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-update-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}
+
+      - name: Apply the verified package patch
+        id: patch
+        env:
+          TAP_PATH: ${{ needs.verify.outputs.tap_path }}
+        run: |
+          set -euo pipefail
+          patch_file="${RUNNER_TEMP}/package-update.patch"
+          [[ -s "${patch_file}" ]] || { echo "verified package patch is empty" >&2; exit 1; }
+
+          if git apply --check "${patch_file}"; then
+            git apply "${patch_file}"
+          elif git apply --reverse --check "${patch_file}"; then
+            echo "${TAP_PATH} already contains the verified package update"
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          else
+            echo "main diverged from the verified package update; dispatch again" >&2
+            exit 1
+          fi
+
+          [[ "$(git diff --name-only)" == "${TAP_PATH}" ]] || {
+            echo "verified patch changed an unexpected path" >&2
+            exit 1
+          }
+          git diff --check
+          echo "changed=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Create or reconcile the update pull request
+        if: steps.patch.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ inputs.package }}
+          TAP_PATH: ${{ needs.verify.outputs.tap_path }}
+          TOKEN: ${{ needs.verify.outputs.token }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          branch="automation/${PACKAGE}/${VERSION}"
+          existing_pr="$(gh pr list --base main --head "${branch}" --state open --json url --jq '.[0].url // ""')"
+          if [[ -n "${existing_pr}" ]]; then
+            git fetch origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
+            [[ "$(git diff --name-only "main...origin/${branch}")" == "${TAP_PATH}" ]] || {
+              echo "existing pull request changes unexpected paths" >&2
+              exit 1
+            }
+            [[ "$(git hash-object "${TAP_PATH}")" == "$(git rev-parse "origin/${branch}:${TAP_PATH}")" ]] || {
+              echo "existing pull request does not contain the verified package state" >&2
+              exit 1
+            }
+            echo "An update pull request already exists: ${existing_pr}"
+            exit 0
+          fi
+          if git ls-remote --exit-code --heads origin "refs/heads/${branch}" >/dev/null 2>&1; then
+            echo "${branch} exists without an open pull request; reconcile it manually" >&2
+            exit 1
+          fi
+
+          git switch -c "${branch}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "${TAP_PATH}"
+          [[ "$(git diff --cached --name-only)" == "${TAP_PATH}" ]] || exit 1
+          git commit -m "Update ${TOKEN} to ${VERSION}"
+          git push origin "HEAD:refs/heads/${branch}"
+          gh pr create \
+            --base main \
+            --head "${branch}" \
+            --title "Update ${TOKEN} to ${VERSION}" \
+            --body "Updates \`${TOKEN}\` from the verified, published ${PACKAGE} ${VERSION} release."

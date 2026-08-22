@@ -1,6 +1,6 @@
-cask "key@alpha" do
-  version "v0.2.0-alpha.11"
-  sha256 "8ff1bab3824ccc98988aaa7f05219d36073b2f629e377fb24d7e2a8250d9ef6c"
+cask "@TOKEN@" do
+  version "@VERSION@"
+  sha256 "@SHA256@"
 
   url "https://github.com/tvanreenen/key/releases/download/#{version}/Key-Preview-#{version}.zip"
   name "Key Preview"
@@ -11,7 +11,7 @@ cask "key@alpha" do
     skip "Homebrew updates are published manually"
   end
 
-  conflicts_with cask: ["key@beta", "key@rc"]
+  conflicts_with cask: [@CONFLICTS@]
   depends_on macos: :tahoe
 
   app "Key Preview.app"

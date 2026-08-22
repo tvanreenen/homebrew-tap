@@ -2,10 +2,14 @@ cask "key" do
   version "v0.2.0"
   sha256 "e70065fdb6deed2ec864cd3a1a0bc1f0e31f4c3af8212ea78308dbd7e82e0144"
 
-  url "https://github.com/tvanreenen/key/releases/download/v0.2.0/Key-v0.2.0.zip"
+  url "https://github.com/tvanreenen/key/releases/download/#{version}/Key-#{version}.zip"
   name "Key"
-  desc "File-based secret manager with native authentication"
+  desc "CLI password manager backed by Secure Enclave"
   homepage "https://github.com/tvanreenen/key"
+
+  livecheck do
+    skip "Homebrew updates are published manually"
+  end
 
   depends_on macos: :tahoe
 
