@@ -2,10 +2,14 @@ cask "key@beta" do
   version "v0.2.0-beta.1"
   sha256 "8216afea14a4de764b0b844f2c6ff30c035b0ce7eb510bece7f02aa8e81b5b64"
 
-  url "https://github.com/tvanreenen/key/releases/download/v0.2.0-beta.1/Key-Preview-v0.2.0-beta.1.zip"
+  url "https://github.com/tvanreenen/key/releases/download/#{version}/Key-Preview-#{version}.zip"
   name "Key Preview"
-  desc "File-based secret manager with native authentication"
+  desc "CLI password manager backed by Secure Enclave"
   homepage "https://github.com/tvanreenen/key"
+
+  livecheck do
+    skip "Homebrew updates are published manually"
+  end
 
   conflicts_with cask: ["key@alpha", "key@rc"]
   depends_on macos: :tahoe

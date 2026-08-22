@@ -1,0 +1,42 @@
+name: Homebrew checks
+
+on:
+  pull_request:
+    paths:
+      - "Formula/**"
+      - "Casks/**"
+      - ".github/**"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  test:
+    name: Audit changed packages
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Set up Homebrew and check out the tap
+        id: homebrew
+        uses: Homebrew/actions/setup-homebrew@8f3d1ec8a696b3b9d9a6c3696b6c73033cab69e4 # 2026.08.14.1
+        with:
+          core: false
+          cask: false
+          stable: true
+
+      - name: Install Homebrew style dependencies
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        run: brew install-bundler-gems --groups=style
+
+      - name: Check tap syntax
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        run: |
+          set -euo pipefail
+          brew test-bot --only-tap-syntax
+
+      - name: Audit tap packages
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        run: brew audit --strict --online --tap=tvanreenen/tap --except=github_prerelease_version
