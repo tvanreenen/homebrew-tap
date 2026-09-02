@@ -40,3 +40,28 @@ jobs:
       - name: Audit tap packages
         working-directory: ${{ steps.homebrew.outputs.repository-path }}
         run: brew audit --strict --online --tap=tvanreenen/tap --except=github_prerelease_version
+
+  test-xkcdpass-linux:
+    name: Test xkcdpass on Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Set up Homebrew and check out the tap
+        id: homebrew
+        uses: Homebrew/actions/setup-homebrew@8f3d1ec8a696b3b9d9a6c3696b6c73033cab69e4 # 2026.08.14.1
+        with:
+          core: false
+          cask: false
+          stable: true
+
+      - name: Install and test xkcdpass
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          HOMEBREW_NO_INSTALL_FROM_API: "1"
+        run: |
+          set -euo pipefail
+          brew install --build-from-source tvanreenen/tap/xkcdpass
+          brew test tvanreenen/tap/xkcdpass

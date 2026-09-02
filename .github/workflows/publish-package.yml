@@ -106,6 +106,7 @@ jobs:
           DOWNLOAD_URL: ${{ steps.package.outputs.download_url }}
           FORMULA_VERSION: ${{ steps.package.outputs.formula_version }}
           KIND: ${{ steps.package.outputs.kind }}
+          LINUX_SHA256: ${{ steps.package.outputs.linux_sha256 }}
           PACKAGE: ${{ inputs.package }}
           SHA256: ${{ steps.package.outputs.sha256 }}
           TAP_PATH: ${{ steps.package.outputs.tap_path }}
@@ -137,14 +138,28 @@ jobs:
               "${DOWNLOAD_URL}" \
               "${SHA256}" \
               "${RUNNER_TEMP}/package-state"
-            if grep -qx "current=true" "${RUNNER_TEMP}/package-state"; then
+            if [[ "${PACKAGE}" != "xkcdpass" ]] && grep -qx "current=true" "${RUNNER_TEMP}/package-state"; then
               echo "${TAP_PATH} already publishes the verified release"
               echo "changed=false" >> "${GITHUB_OUTPUT}"
               exit 0
             fi
           fi
 
-          if [[ "${KIND}" == "formula" ]]; then
+          if [[ "${PACKAGE}" == "xkcdpass" ]]; then
+            candidate_path="${RUNNER_TEMP}/xkcdpass.rb"
+            .github/scripts/update-xkcdpass-formula.rb \
+              "${TAP_PATH}" \
+              "${candidate_path}" \
+              "${FORMULA_VERSION}" \
+              "${SHA256}" \
+              "${LINUX_SHA256}"
+            if cmp -s "${candidate_path}" "${TAP_PATH}"; then
+              echo "${TAP_PATH} already publishes the verified release"
+              echo "changed=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            cp "${candidate_path}" "${TAP_PATH}"
+          elif [[ "${KIND}" == "formula" ]]; then
             brew bump-formula-pr --write-only --no-audit \
               --url="${DOWNLOAD_URL}" \
               --sha256="${SHA256}" \
