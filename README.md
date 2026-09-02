@@ -17,3 +17,5 @@ The workflow accepts only the checked-in package choices. Runs are queued per pa
 If release verification finds missing, extra, or inconsistent assets, publish a new source version instead of replacing release assets. If a Homebrew or proposal step fails, fix the tap on `main` and dispatch the same version again. An exact update already on `main` succeeds without a pull request, and an existing open pull request is reused. If an automation branch exists without an open pull request, inspect or remove that branch before retrying.
 
 The repository setting **Allow GitHub Actions to create and approve pull requests** must be enabled for the final proposal job. Keep the default `GITHUB_TOKEN` permission read-only; the workflow grants write access only to that job. GitHub holds checks on a pull request created by `GITHUB_TOKEN` for approval; use **Approve workflows to run** in the pull request before merging.
+
+The `xkcdpass` formula installs the published `darwin/arm64` archive on macOS 13 Ventura or later and the published `linux/amd64` archive on x86-64 Linux. Its publication path verifies both archives and checksums before proposing an update.

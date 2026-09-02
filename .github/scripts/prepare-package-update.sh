@@ -39,9 +39,10 @@ case "${package}" in
     tap_path="Formula/xkcdpass.rb"
     formula_version="${version#v}"
     target_asset="xkcdpass_${version}_darwin_arm64.tar.gz"
+    linux_asset="xkcdpass_${version}_linux_amd64.tar.gz"
     checksummed_assets=(
       "${target_asset}"
-      "xkcdpass_${version}_linux_amd64.tar.gz"
+      "${linux_asset}"
     )
     expected_assets=("checksums.txt" "${checksummed_assets[@]}")
     ;;
@@ -82,6 +83,11 @@ case "${package}" in
 esac
 
 download_url="https://github.com/${repository}/releases/download/${version}/${target_asset}"
+download_assets=("${target_asset}")
+if [[ "${package}" == "xkcdpass" ]]
+then
+  download_assets=("${checksummed_assets[@]}")
+fi
 release_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/homebrew-package-release.XXXXXX")"
 trap 'rm -rf "${release_dir}"' EXIT
 release_json="${release_dir}/release.json"
@@ -112,22 +118,30 @@ do
   ' "${release_json}" >/dev/null || fail "release asset identity is invalid: ${asset}"
 done
 
-gh release download "${version}" \
-  --repo "${repository}" \
-  --dir "${release_dir}" \
-  --pattern checksums.txt \
-  --pattern "${target_asset}"
+download_args=(
+  release download "${version}"
+  --repo "${repository}"
+  --dir "${release_dir}"
+  --pattern checksums.txt
+)
+for asset in "${download_assets[@]}"
+do
+  download_args+=(--pattern "${asset}")
+done
+gh "${download_args[@]}"
 
 downloaded_files="$(
   find "${release_dir}" -maxdepth 1 -type f ! -name release.json -exec basename {} \; | LC_ALL=C sort
 )"
-expected_files="$(printf '%s\n' checksums.txt "${target_asset}" | LC_ALL=C sort)"
+expected_files="$(printf '%s\n' checksums.txt "${download_assets[@]}" | LC_ALL=C sort)"
 [[ "${downloaded_files}" == "${expected_files}" ]] ||
-  fail "download did not produce exactly checksums.txt and ${target_asset}"
+  fail "download did not produce exactly the expected release files"
 
 actual_checksum_assets=()
 target_count=0
 target_checksum=""
+linux_count=0
+linux_checksum=""
 while IFS= read -r checksum_line || [[ -n "${checksum_line}" ]]
 do
   [[ "${checksum_line}" =~ ^([0-9a-f]{64})\ \ ([0-9A-Za-z._+-]+)$ ]] ||
@@ -140,6 +154,11 @@ do
     ((target_count += 1))
     target_checksum="${checksum}"
   fi
+  if [[ -n "${linux_asset:-}" && "${filename}" == "${linux_asset}" ]]
+  then
+    ((linux_count += 1))
+    linux_checksum="${checksum}"
+  fi
 done <"${release_dir}/checksums.txt"
 
 sorted_actual_checksum_assets="$(printf '%s\n' "${actual_checksum_assets[@]}" | LC_ALL=C sort)"
@@ -147,11 +166,23 @@ sorted_expected_checksum_assets="$(printf '%s\n' "${checksummed_assets[@]}" | LC
 [[ "${sorted_actual_checksum_assets}" == "${sorted_expected_checksum_assets}" ]] ||
   fail "checksums.txt does not cover exactly the expected archives"
 [[ ${target_count} -eq 1 ]] || fail "checksums.txt must name ${target_asset} exactly once"
+if [[ "${package}" == "xkcdpass" ]]
+then
+  [[ ${linux_count} -eq 1 ]] || fail "checksums.txt must name ${linux_asset} exactly once"
+fi
 
-actual_checksum="$(shasum -a 256 "${release_dir}/${target_asset}" | awk '{print $1}')"
-[[ "${actual_checksum}" == "${target_checksum}" ]] || fail "${target_asset} does not match checksums.txt"
+for asset in "${download_assets[@]}"
+do
+  expected_checksum="${target_checksum}"
+  if [[ -n "${linux_asset:-}" && "${asset}" == "${linux_asset}" ]]
+  then
+    expected_checksum="${linux_checksum}"
+  fi
+  actual_checksum="$(shasum -a 256 "${release_dir}/${asset}" | awk '{print $1}')"
+  [[ "${actual_checksum}" == "${expected_checksum}" ]] || fail "${asset} does not match checksums.txt"
+done
 
-for asset in checksums.txt "${target_asset}"
+for asset in checksums.txt "${download_assets[@]}"
 do
   downloaded_digest="sha256:$(shasum -a 256 "${release_dir}/${asset}" | awk '{print $1}')"
   api_digest="$(jq -er --arg name "${asset}" '.assets[] | select(.name == $name) | .digest' "${release_json}")"
@@ -161,23 +192,32 @@ done
 
 case "${package}" in
   xkcdpass)
-    archive_root="${target_asset%.tar.gz}"
-    expected_entry="${archive_root}/xkcdpass"
-    archive_entries="$(tar -tzf "${release_dir}/${target_asset}")"
-    [[ "${archive_entries}" == "${expected_entry}" ]] ||
-      fail "unexpected xkcdpass archive layout: ${archive_entries}"
     extract_dir="${release_dir}/extracted"
     mkdir "${extract_dir}"
-    tar -C "${extract_dir}" -xzf "${release_dir}/${target_asset}"
-    binary="${extract_dir}/${expected_entry}"
-    [[ -f "${binary}" && ! -L "${binary}" && -x "${binary}" ]] ||
-      fail "xkcdpass archive does not contain the expected executable"
-    binary_description="$(file "${binary}")"
-    [[ "${binary_description}" == *"Mach-O 64-bit"* && "${binary_description}" == *"arm64"* ]] ||
-      fail "unexpected xkcdpass binary format: ${binary_description}"
-    binary_version="$("${binary}" --version)"
-    [[ "${binary_version}" == "${version}" ]] ||
-      fail "xkcdpass binary version does not match ${version}"
+    for asset in "${download_assets[@]}"
+    do
+      archive_root="${asset%.tar.gz}"
+      expected_entry="${archive_root}/xkcdpass"
+      archive_entries="$(tar -tzf "${release_dir}/${asset}")"
+      [[ "${archive_entries}" == "${expected_entry}" ]] ||
+        fail "unexpected xkcdpass archive layout: ${archive_entries}"
+      tar -C "${extract_dir}" -xzf "${release_dir}/${asset}"
+      binary="${extract_dir}/${expected_entry}"
+      [[ -f "${binary}" && ! -L "${binary}" && -x "${binary}" ]] ||
+        fail "xkcdpass archive does not contain the expected executable"
+      binary_description="$(file "${binary}")"
+      if [[ "${asset}" == "${target_asset}" ]]
+      then
+        [[ "${binary_description}" == *"Mach-O 64-bit"* && "${binary_description}" == *"arm64"* ]] ||
+          fail "unexpected Darwin xkcdpass binary format: ${binary_description}"
+        binary_version="$("${binary}" --version)"
+        [[ "${binary_version}" == "${version}" ]] ||
+          fail "xkcdpass binary version does not match ${version}"
+      else
+        [[ "${binary_description}" == *"ELF 64-bit LSB executable, x86-64"* ]] ||
+          fail "unexpected Linux xkcdpass binary format: ${binary_description}"
+      fi
+    done
     ;;
   key | frame)
     unzip -tq "${release_dir}/${target_asset}" >/dev/null || fail "${target_asset} is not a valid ZIP archive"
@@ -195,4 +235,8 @@ esac
   echo "formula_version=${formula_version}"
   echo "download_url=${download_url}"
   echo "sha256=${target_checksum}"
+  if [[ "${package}" == "xkcdpass" ]]
+  then
+    echo "linux_sha256=${linux_checksum}"
+  fi
 } >>"${output_file}"
