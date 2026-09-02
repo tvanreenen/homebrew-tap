@@ -10,13 +10,6 @@ abort "invalid Linux SHA-256" unless linux_sha256.match?(/\A[0-9a-f]{64}\z/)
 abort "output already exists" if File.exist?(output_path)
 
 contents = File.read(input_path)
-version_pattern = /^(\s*)version "[^"]+"$/
-abort "formula must contain exactly one version" if contents.scan(version_pattern).length != 1
-
-contents = contents.sub(version_pattern) do
-  %Q(#{::Regexp.last_match(1)}version "#{version}")
-end
-
 platforms = {
   "darwin_arm64" => darwin_sha256,
   "linux_amd64"  => linux_sha256,
