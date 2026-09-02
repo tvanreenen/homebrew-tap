@@ -59,8 +59,6 @@ jobs:
 
       - name: Install and test xkcdpass
         working-directory: ${{ steps.homebrew.outputs.repository-path }}
-        env:
-          HOMEBREW_NO_INSTALL_FROM_API: "1"
         run: |
           set -euo pipefail
           brew install --build-from-source tvanreenen/tap/xkcdpass
