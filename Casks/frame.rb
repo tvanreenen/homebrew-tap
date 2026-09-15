@@ -16,8 +16,12 @@ cask "frame" do
   app "Frame-v#{version}/Frame.app"
   binary "Frame-v#{version}/bin/frame"
 
-  postflight do
-    system "/usr/bin/xattr", "-dr", "com.apple.quarantine", "#{staged_path}/Frame-v#{version}/bin/frame"
-    system "/usr/bin/xattr", "-dr", "com.apple.quarantine", "#{appdir}/Frame.app"
+  postflight_steps do
+    run "/usr/bin/xattr",
+        args:         ["-dr", "com.apple.quarantine", "{{staged_path}}/Frame-v{{version}}/bin/frame"],
+        must_succeed: false
+    run "/usr/bin/xattr",
+        args:         ["-dr", "com.apple.quarantine", "{{appdir}}/Frame.app"],
+        must_succeed: false
   end
 end
