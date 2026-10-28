@@ -2,10 +2,10 @@ cask "key@alpha" do
   version "v0.2.0-alpha.11"
   sha256 "8ff1bab3824ccc98988aaa7f05219d36073b2f629e377fb24d7e2a8250d9ef6c"
 
-  url "https://github.com/tvanreenen/key/releases/download/#{version}/Key-Preview-#{version}.zip"
+  url "https://github.com/tvr-works/key/releases/download/#{version}/Key-Preview-#{version}.zip"
   name "Key Preview"
   desc "CLI password manager backed by Secure Enclave"
-  homepage "https://github.com/tvanreenen/key"
+  homepage "https://github.com/tvr-works/key"
 
   livecheck do
     skip "Homebrew updates are published manually"

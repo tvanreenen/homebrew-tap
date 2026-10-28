@@ -47,7 +47,7 @@ case "${package}" in
     expected_assets=("checksums.txt" "${checksummed_assets[@]}")
     ;;
   key)
-    repository="tvanreenen/key"
+    repository="tvr-works/key"
     kind="cask"
     formula_version="${version}"
     if [[ "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
