@@ -1,5 +1,21 @@
 # Homebrew tap
 
+This tap contains Frame and xkcdpass. Key is maintained in [tvr-works/homebrew-tap](https://github.com/tvr-works/homebrew-tap).
+
+## Key installations
+
+Key’s Stable, alpha, and beta casks have moved to `tvr-works/tap`. The `tap_migrations.json` entries redirect the old tokens to the organization tap. Update Homebrew, add the new tap, and use its fully qualified cask for upgrades:
+
+```sh
+brew update
+brew tap tvr-works/tap
+brew upgrade --cask tvr-works/tap/key
+```
+
+For Preview, substitute `key@alpha` or `key@beta`. New installations use `brew install --cask tvr-works/tap/key`. Keep this personal tap if you also use Frame or xkcdpass. No Key app, helper, or vault identity changes are involved.
+
+Key release publication now targets the organization tap. Old `package=key` dispatches to this repository are rejected; the remaining publisher supports Frame and xkcdpass.
+
 ## Publishing package updates
 
 Each project publishes and verifies its GitHub release before Homebrew changes. After this workflow is present on `main`, open **Publish package update** in this repository's Actions tab, choose `main`, select the package, and enter its v-prefixed version. Project release commands dispatch the same workflow through the operator's existing GitHub CLI login; they do not hold a tap credential.

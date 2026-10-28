@@ -47,23 +47,7 @@ case "${package}" in
     expected_assets=("checksums.txt" "${checksummed_assets[@]}")
     ;;
   key)
-    repository="tvr-works/key"
-    kind="cask"
-    formula_version="${version}"
-    if [[ "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-    then
-      token="key"
-      target_asset="Key-${version}.zip"
-    elif [[ "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.[0-9]+$ ]]
-    then
-      token="key@${BASH_REMATCH[1]}"
-      target_asset="Key-Preview-${version}.zip"
-    else
-      fail "key requires a stable version or a numbered alpha, beta, or rc version"
-    fi
-    tap_path="Casks/${token}.rb"
-    checksummed_assets=("${target_asset}")
-    expected_assets=("checksums.txt" "${target_asset}")
+    fail "Key publication has moved to tvr-works/homebrew-tap"
     ;;
   frame)
     repository="tvanreenen/frame"
@@ -219,7 +203,7 @@ case "${package}" in
       fi
     done
     ;;
-  key | frame)
+  frame)
     unzip -tq "${release_dir}/${target_asset}" >/dev/null || fail "${target_asset} is not a valid ZIP archive"
     ;;
   *)
