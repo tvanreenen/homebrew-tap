@@ -11,7 +11,6 @@ on:
         type: choice
         options:
           - xkcdpass
-          - key
           - frame
       version:
         description: Published v-prefixed Semantic Version
@@ -55,7 +54,7 @@ jobs:
             exit 1
           }
           case "${PACKAGE}" in
-            xkcdpass | key | frame) ;;
+            xkcdpass | frame) ;;
             *) echo "unsupported package: ${PACKAGE}" >&2; exit 1 ;;
           esac
           [[ "${DEFAULT_BRANCH}" == "main" && "${SELECTED_REF}" == "refs/heads/main" ]] || {
@@ -110,39 +109,23 @@ jobs:
           PACKAGE: ${{ inputs.package }}
           SHA256: ${{ steps.package.outputs.sha256 }}
           TAP_PATH: ${{ steps.package.outputs.tap_path }}
-          TOKEN: ${{ steps.package.outputs.token }}
         run: |
           set -euo pipefail
-          created=false
-          if [[ ! -f "${TAP_PATH}" ]]; then
-            [[ "${PACKAGE}:${TOKEN}" == "key:key@rc" ]] || {
-              echo "expected package file is missing: ${TAP_PATH}" >&2
-              exit 1
-            }
-            if [[ -n "$(git log -1 --format=%H -- "${TAP_PATH}")" ]]; then
-              echo "refusing to recreate a previously tracked package file: ${TAP_PATH}" >&2
-              exit 1
-            fi
-            .github/scripts/render-key-preview-cask.rb \
-              .github/templates/key-preview-cask.rb.in \
-              "${TAP_PATH}" \
-              "${TOKEN}" \
-              "${FORMULA_VERSION}" \
-              "${SHA256}"
-            created=true
-          else
-            .github/scripts/check-package-state.sh \
-              "${KIND}" \
-              "${BREW_REF}" \
-              "${FORMULA_VERSION}" \
-              "${DOWNLOAD_URL}" \
-              "${SHA256}" \
-              "${RUNNER_TEMP}/package-state"
-            if [[ "${PACKAGE}" != "xkcdpass" ]] && grep -qx "current=true" "${RUNNER_TEMP}/package-state"; then
-              echo "${TAP_PATH} already publishes the verified release"
-              echo "changed=false" >> "${GITHUB_OUTPUT}"
-              exit 0
-            fi
+          [[ -f "${TAP_PATH}" ]] || {
+            echo "expected package file is missing: ${TAP_PATH}" >&2
+            exit 1
+          }
+          .github/scripts/check-package-state.sh \
+            "${KIND}" \
+            "${BREW_REF}" \
+            "${FORMULA_VERSION}" \
+            "${DOWNLOAD_URL}" \
+            "${SHA256}" \
+            "${RUNNER_TEMP}/package-state"
+          if [[ "${PACKAGE}" != "xkcdpass" ]] && grep -qx "current=true" "${RUNNER_TEMP}/package-state"; then
+            echo "${TAP_PATH} already publishes the verified release"
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
 
           if [[ "${PACKAGE}" == "xkcdpass" ]]; then
@@ -164,7 +147,7 @@ jobs:
               --url="${DOWNLOAD_URL}" \
               --sha256="${SHA256}" \
               "${BREW_REF}"
-          elif [[ "${created}" == "false" ]]; then
+          else
             bump_args=(
               --write-only
               --no-audit
@@ -185,12 +168,8 @@ jobs:
             echo "package bump changed files other than ${TAP_PATH}" >&2
             exit 1
           }
-          if [[ "${created}" == "true" ]]; then
-            git add --intent-to-add -- "${TAP_PATH}"
-          fi
           git diff --check
           git diff --binary -- "${TAP_PATH}" > "${RUNNER_TEMP}/package-update.patch"
-          echo "created=${created}" >> "${GITHUB_OUTPUT}"
           echo "changed=true" >> "${GITHUB_OUTPUT}"
 
       - name: Check package style and audit
@@ -198,23 +177,11 @@ jobs:
         working-directory: ${{ steps.homebrew.outputs.repository-path }}
         env:
           BREW_REF: ${{ steps.package.outputs.brew_ref }}
-          CREATED: ${{ steps.candidate.outputs.created }}
           TAP_PATH: ${{ steps.package.outputs.tap_path }}
-          TOKEN: ${{ steps.package.outputs.token }}
         run: |
           set -euo pipefail
           brew style "${TAP_PATH}"
-          if [[ "${CREATED}" == "true" ]]; then
-            audit_args=(--new)
-          else
-            audit_args=(--strict --online)
-          fi
-          case "${TOKEN}" in
-            key@alpha | key@beta | key@rc)
-              audit_args+=(--except=github_prerelease_version)
-              ;;
-          esac
-          brew audit "${audit_args[@]}" "${BREW_REF}"
+          brew audit --strict --online "${BREW_REF}"
 
       - name: Install and test formula
         if: steps.candidate.outputs.changed == 'true' && steps.package.outputs.kind == 'formula'
@@ -275,7 +242,6 @@ jobs:
           [[ "${VERSION}" =~ ${semver} ]] || exit 1
           case "${PACKAGE}:${TAP_PATH}:${TOKEN}" in
             xkcdpass:Formula/xkcdpass.rb:xkcdpass | frame:Casks/frame.rb:frame) ;;
-            key:Casks/key.rb:key | key:Casks/key@alpha.rb:key@alpha | key:Casks/key@beta.rb:key@beta | key:Casks/key@rc.rb:key@rc) ;;
             *) echo "verified package mapping is invalid" >&2; exit 1 ;;
           esac
 

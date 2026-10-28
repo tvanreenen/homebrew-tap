@@ -5,6 +5,7 @@ on:
     paths:
       - "Formula/**"
       - "Casks/**"
+      - "tap_migrations.json"
       - ".github/**"
   workflow_dispatch:
 
@@ -39,7 +40,7 @@ jobs:
 
       - name: Audit tap packages
         working-directory: ${{ steps.homebrew.outputs.repository-path }}
-        run: brew audit --strict --online --tap=tvanreenen/tap --except=github_prerelease_version
+        run: brew audit --strict --online --tap=tvanreenen/tap
 
   test-xkcdpass-linux:
     name: Test xkcdpass on Linux
