@@ -10,7 +10,6 @@ on:
         required: true
         type: choice
         options:
-          - xkcdpass
           - frame
       version:
         description: Published v-prefixed Semantic Version
@@ -54,7 +53,7 @@ jobs:
             exit 1
           }
           case "${PACKAGE}" in
-            xkcdpass | frame) ;;
+            frame) ;;
             *) echo "unsupported package: ${PACKAGE}" >&2; exit 1 ;;
           esac
           [[ "${DEFAULT_BRANCH}" == "main" && "${SELECTED_REF}" == "refs/heads/main" ]] || {
@@ -105,7 +104,6 @@ jobs:
           DOWNLOAD_URL: ${{ steps.package.outputs.download_url }}
           FORMULA_VERSION: ${{ steps.package.outputs.formula_version }}
           KIND: ${{ steps.package.outputs.kind }}
-          LINUX_SHA256: ${{ steps.package.outputs.linux_sha256 }}
           PACKAGE: ${{ inputs.package }}
           SHA256: ${{ steps.package.outputs.sha256 }}
           TAP_PATH: ${{ steps.package.outputs.tap_path }}
@@ -122,40 +120,19 @@ jobs:
             "${DOWNLOAD_URL}" \
             "${SHA256}" \
             "${RUNNER_TEMP}/package-state"
-          if [[ "${PACKAGE}" != "xkcdpass" ]] && grep -qx "current=true" "${RUNNER_TEMP}/package-state"; then
+          if grep -qx "current=true" "${RUNNER_TEMP}/package-state"; then
             echo "${TAP_PATH} already publishes the verified release"
             echo "changed=false" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
 
-          if [[ "${PACKAGE}" == "xkcdpass" ]]; then
-            candidate_path="${RUNNER_TEMP}/xkcdpass.rb"
-            .github/scripts/update-xkcdpass-formula.rb \
-              "${TAP_PATH}" \
-              "${candidate_path}" \
-              "${FORMULA_VERSION}" \
-              "${SHA256}" \
-              "${LINUX_SHA256}"
-            if cmp -s "${candidate_path}" "${TAP_PATH}"; then
-              echo "${TAP_PATH} already publishes the verified release"
-              echo "changed=false" >> "${GITHUB_OUTPUT}"
-              exit 0
-            fi
-            cp "${candidate_path}" "${TAP_PATH}"
-          elif [[ "${KIND}" == "formula" ]]; then
-            brew bump-formula-pr --write-only --no-audit \
-              --url="${DOWNLOAD_URL}" \
-              --sha256="${SHA256}" \
-              "${BREW_REF}"
-          else
-            bump_args=(
-              --write-only
-              --no-audit
-              --version="${FORMULA_VERSION}"
-              --sha256="${SHA256}"
-            )
-            brew bump-cask-pr "${bump_args[@]}" "${BREW_REF}"
-          fi
+          bump_args=(
+            --write-only
+            --no-audit
+            --version="${FORMULA_VERSION}"
+            --sha256="${SHA256}"
+          )
+          brew bump-cask-pr "${bump_args[@]}" "${BREW_REF}"
 
           brew style --fix "${TAP_PATH}"
           changed_paths="$(git status --short | sed -E 's/^.. //')"
@@ -182,19 +159,6 @@ jobs:
           set -euo pipefail
           brew style "${TAP_PATH}"
           brew audit --strict --online "${BREW_REF}"
-
-      - name: Install and test formula
-        if: steps.candidate.outputs.changed == 'true' && steps.package.outputs.kind == 'formula'
-        working-directory: ${{ steps.homebrew.outputs.repository-path }}
-        env:
-          BREW_REF: ${{ steps.package.outputs.brew_ref }}
-          GH_TOKEN: ""
-          HOMEBREW_GITHUB_API_TOKEN: ""
-          HOMEBREW_NO_INSTALL_FROM_API: "1"
-        run: |
-          set -euo pipefail
-          brew install --build-from-source "${BREW_REF}"
-          brew test "${BREW_REF}"
 
       - name: Install and uninstall cask
         if: steps.candidate.outputs.changed == 'true' && steps.package.outputs.kind == 'cask'
@@ -241,7 +205,7 @@ jobs:
           semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$'
           [[ "${VERSION}" =~ ${semver} ]] || exit 1
           case "${PACKAGE}:${TAP_PATH}:${TOKEN}" in
-            xkcdpass:Formula/xkcdpass.rb:xkcdpass | frame:Casks/frame.rb:frame) ;;
+            frame:Casks/frame.rb:frame) ;;
             *) echo "verified package mapping is invalid" >&2; exit 1 ;;
           esac
 
