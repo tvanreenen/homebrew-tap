@@ -37,7 +37,12 @@ jobs:
 
       - name: Audit tap packages
         working-directory: ${{ steps.homebrew.outputs.repository-path }}
-        run: brew audit --strict --online --tap=tvanreenen/tap
+        run: |
+          if [[ -n "$(git ls-files 'Casks/*.rb' 'Formula/*.rb')" ]]; then
+            brew audit --strict --online --tap=tvanreenen/tap
+          else
+            echo "Compatibility tap has no packages; forwarding and retired publishers are checked by the migration contract."
+          fi
 
   migration:
     name: Test tap migration contract

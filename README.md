@@ -1,49 +1,31 @@
-# Homebrew tap
+# Personal Homebrew compatibility tap
 
-This tap contains Frame. Key and xkcdpass are maintained in [tvr-works/homebrew-tap](https://github.com/tvr-works/homebrew-tap).
+Frame, Key (including its alpha and beta channels), and xkcdpass now use the existing [TVR Works tap](https://github.com/tvr-works/homebrew-tap). This repository remains available for its `tap_migrations.json` forwarding entries and existing users. Keep it installed while legacy tokens or receipts depend on those entries.
 
-## Key installations
+## Existing installations
 
-Key’s Stable, alpha, and beta casks have moved to `tvr-works/tap`. The `tap_migrations.json` entries redirect the old tokens to the organization tap. Update Homebrew, add the new tap, and use its fully qualified cask for upgrades:
+Update Homebrew, add the destination tap, and use its fully qualified package names:
 
 ```sh
 brew update
 brew tap tvr-works/tap
+brew upgrade --cask tvr-works/tap/frame
 brew upgrade --cask tvr-works/tap/key
-```
-
-For Preview, substitute `key@alpha` or `key@beta`. New installations use `brew install --cask tvr-works/tap/key`. Keep this personal tap if you also use Frame. No Key app, helper, or vault identity changes are involved.
-
-Key release publication now targets the organization tap. Old `package=key` dispatches to this repository are rejected; the remaining publisher supports Frame.
-
-## Publishing package updates
-
-Each project publishes and verifies its GitHub release before Homebrew changes. After this workflow is present on `main`, open **Publish package update** in this repository's Actions tab, choose `main`, select the package, and enter its v-prefixed version. Project release commands dispatch the same workflow through the operator's existing GitHub CLI login; they do not hold a tap credential.
-
-```sh
-gh workflow run publish-package.yml \
-  --repo tvanreenen/homebrew-tap \
-  --ref main \
-  -f package=frame \
-  -f version=vX.Y.Z
-```
-
-The workflow accepts only the checked-in package choices. Runs are queued per package. It verifies the published release and checksum, prepares and formats exactly one formula or cask change, runs the relevant Homebrew checks with read-only permissions, and then uses this repository's `GITHUB_TOKEN` to open a pull request containing the verified patch. No source-repository credential is required.
-
-If release verification finds missing, extra, or inconsistent assets, publish a new source version instead of replacing release assets. If a Homebrew or proposal step fails, fix the tap on `main` and dispatch the same version again. An exact update already on `main` succeeds without a pull request, and an existing open pull request is reused. If an automation branch exists without an open pull request, inspect or remove that branch before retrying.
-
-The repository setting **Allow GitHub Actions to create and approve pull requests** must be enabled for the final proposal job. Keep the default `GITHUB_TOKEN` permission read-only; the workflow grants write access only to that job. GitHub holds checks on a pull request created by `GITHUB_TOKEN` for approval; use **Approve workflows to run** in the pull request before merging.
-
-## xkcdpass installations
-
-The xkcdpass formula has moved to `tvr-works/tap`, using the same immutable release archives and checksums. Update Homebrew and select the destination formula:
-
-```sh
-brew update
-brew tap tvr-works/tap
 brew upgrade tvr-works/tap/xkcdpass
 ```
 
-On Homebrew versions that require tap trust, approve the destination formula when prompted or run `brew trust --formula tvr-works/tap/xkcdpass` before upgrading. The migration entry updates installed receipts to the organization tap; an already-current version does not need a replacement binary. Keep the personal tap for Frame. Old `package=xkcdpass` publication requests are rejected before any release download or proposal; new requests belong to the organization tap.
+Use only the commands for packages you have installed. For Key Preview, substitute `key@alpha` or `key@beta`; the Preview channels share one app identity, so select one channel at a time. On Homebrew versions that request tap trust, approve the specific destination package when prompted, for example `brew trust --cask tvr-works/tap/frame`.
 
-Maintainers must integrate and verify the destination formula before merging this removal and migration entry. Integrate the source release-helper destination before this final redirect. If destination checks fail, keep this change off `main`; do not remove the old formula first.
+Frame retains the `frame` token, `com.frame.app` bundle identifier, existing app/CLI layout, signing team, configuration paths, and published `v3.2.0` archive/checksum. Existing download URLs redirect to the transferred source repository. Same-version cask moves can keep the legacy installed receipt until an actual installation; a future genuine upgrade or an explicit `brew reinstall --cask tvr-works/tap/frame` can refresh it. No uninstall or configuration/data deletion is part of these migration instructions. Do not replace historical release bytes or invent a version bump to move ownership.
+
+The destination Frame cask uses standard Homebrew quarantine handling and does not copy this tap's former quarantine-removal workaround. The current preserved release is not qualified as notarized. Real-device first-launch/Gatekeeper acceptance, Accessibility/login continuity, and a later genuinely newer-version upgrade remain separate qualifications; source ownership and signature continuity do not by themselves prove those behaviors. Key app/helper/vault identities and the xkcdpass package identity also remain unchanged.
+
+Fresh installations use `brew install --cask tvr-works/tap/frame`, the corresponding organization Key cask, or `brew install tvr-works/tap/xkcdpass`.
+
+## Publication has moved
+
+Source projects still own their releases. The organization tap owns downloaded-release verification, package rendering, Homebrew checks, and update PRs. Dispatch the manually operated `publish-package.yml` in `tvr-works/homebrew-tap` with the package and its published v-prefixed version. Source projects use the operator's existing GitHub CLI login and do not hold a tap credential.
+
+The compatibility workflow and preparation script in this repository reject old `frame`, `key`, and `xkcdpass` publication requests before release downloads or proposals. The workflow has no repository token permissions and performs no checkout. Existing Key/key@alpha/key@beta/xkcdpass forwarding entries are retained alongside Frame's new entry.
+
+The required checks retain tap syntax/audit validation and the migration-contract suite. With no package definitions left, the audit job validates the compatibility tap's syntax; the separate contract checks the exact forwarding map, absence of moved packages, and rejection of retired publishers without GitHub access. Integrate destination Frame support and the source dispatch route before merging this final forwarding change. Never remove this compatibility repository as a migration shortcut.

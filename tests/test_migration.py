@@ -13,9 +13,9 @@ class MigrationTests(unittest.TestCase):
     def test_destination_and_retained_packages(self):
         migrations = json.loads((ROOT / "tap_migrations.json").read_text())
         self.assertEqual(migrations, {name: "tvr-works/tap" for name in
-                                     ["key", "key@alpha", "key@beta", "xkcdpass"]})
+                                     ["frame", "key", "key@alpha", "key@beta", "xkcdpass"]})
         self.assertFalse((ROOT / "Formula/xkcdpass.rb").exists())
-        self.assertTrue((ROOT / "Casks/frame.rb").is_file())
+        self.assertFalse((ROOT / "Casks/frame.rb").exists())
 
     def test_moved_publishers_fail_before_github_access(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -24,7 +24,7 @@ class MigrationTests(unittest.TestCase):
             fake.write_text("#!/bin/sh\necho 'unexpected GitHub access' >&2\nexit 99\n")
             fake.chmod(0o755)
             env = dict(os.environ, PATH=f"{directory}:{os.environ['PATH']}")
-            for package in ["key", "xkcdpass"]:
+            for package in ["frame", "key", "xkcdpass"]:
                 result = subprocess.run([str(ROOT / ".github/scripts/prepare-package-update.sh"),
                                          package, "v0.2.1", str(directory / "outputs")],
                                         env=env, text=True, capture_output=True)
